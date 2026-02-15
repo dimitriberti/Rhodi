@@ -1,0 +1,831 @@
+//! Core utilities for the Trace Protocol: hashing, frontmatter parsing and code-block extraction.
+//!
+//! Small, focused helpers: [`hash_data`], [`check_data_integrity`], [`extract_frontmatter`] and
+//! code-block parsing helpers.
+
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+
+// FRPONTMATTER STRUCTURE
+
+// Struct to hold the formatter with
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+pub enum DocStatus {
+    Notes,     // do not require any hashing
+    Draft,     // hashing is required but not implemented
+    Published, // properly hashed.
+}
+
+// #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+// pub struct FrontMatter {
+//     // id as a string to avoid requiring uuid's serde feature
+//     #[serde(default = "default_id")]
+//     id: String, // UUID v7 string
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     version_hash: Option<String>,
+//     title: String,
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     author: Option<String>,
+//     #[serde(default = "default_created_at")]
+//     created_at: String,
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     doc_status: Option<DocStatus>, // this should be defaulted to Notes on creation
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     modified_at: Option<String>,
+//     #[serde(default)]
+//     #[serde(flatten)] // capture any extra arbitrary keys
+//     pub extra: BTreeMap<String, serde_norway::Value>,
+// }
+
+// #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+// pub struct TracedDocument {
+//     pub frontmatter: FrontMatter,
+//     pub body: String,
+// }    
+
+fn default_id() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
+fn default_created_at() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct FrontMatter {
+    // id as a string to avoid requiring uuid's serde feature
+    id: uuid::Uuid, // UUID v7 string
+    version_hash: Option<[u8; 32]>,
+    title: String,
+    author: Option<String>,
+    created_at: String,
+    modified_at: Option<String>,
+    doc_status: Option<DocStatus>, // this should be defaulted to Notes on creation
+    pub extra: Option<BTreeMap<String, String>>,
+}
+
+
+// #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct TracedDocument {
+    pub frontmatter: FrontMatter,
+    pub body: String,
+}   
+
+impl TracedDocument {
+    pub fn new(
+        title: &str, content: &str ) -> Self {
+        TracedDocument {
+            frontmatter: FrontMatter {
+                id: uuid::Uuid::now_v7(),
+                version_hash: None,
+                title: title.to_string(),
+                author: None,
+                created_at: default_created_at(),
+                doc_status: Some(DocStatus::Notes),
+                modified_at: None,
+                extra: None,
+            },
+            body: content.trim().to_string(),
+        }
+    }
+
+
+}
+
+
+
+
+// DOCUMENT CREATING AND PROCESSING
+
+#[allow(dead_code)]
+/// Create a new manuscript: initialize frontmatter, initialise timestamps, title, and initial content.
+pub fn create_manuscript(
+    title: &str,
+    content: &str,
+) -> Result<TracedDocument, Box<dyn std::error::Error>> {
+    let frontmatter = FrontMatter {
+        id: default_id(),
+        version_hash: None,
+        title: title.to_string(),
+        author: None,
+        created_at: default_created_at(),
+        doc_status: Some(DocStatus::Notes),
+        modified_at: None,
+        extra: BTreeMap::new(),
+    };
+
+    let doc = TracedDocument {
+        frontmatter,
+        body: content.trim().to_string()
+    };
+
+    Ok(doc)
+}
+
+
+#[test]
+fn test_create_manuscript() {
+    let res = create_manuscript("Test Title", "Initial content");
+    assert!(res.is_err() || res.is_ok()); // just check it runs for now
+}
+
+// Manuscript to string serialization (YAML frontmatter + body)
+pub fn serialize_manuscript(doc: &TracedDocument) -> Result<String, Box<dyn std::error::Error>> {
+    // Serialize the FrontMatter struct directly so new fields are automatically included.
+    let fm_yaml = serde_norway::to_string(&doc.frontmatter)?;
+    Ok(format!("---\n{}\n---\n{}", fm_yaml, doc.body))
+}   
+
+
+
+#[allow(dead_code)]
+/// Update manuscript: re-hash code blocks, update frontmatter timestamps, etc.
+pub fn update_manuscript() -> Result<(), Box<dyn std::error::Error>> {
+    todo!("Return Ok(()) or an Error once implemented");
+}
+
+#[allow(dead_code)]
+/// Compile manuscript: process the document, hash code blocks, sign them, and produce the final output.
+pub fn compile_manuscript() -> Result<(), Box<dyn std::error::Error>> {
+    todo!("Return Ok(()) or an Error once implemented");
+}
+
+// SIMPLE HASHING
+
+/// Hash data: given some content as a string, return its hash using Sha256.
+pub fn hash_data(data: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(data.as_bytes());
+    let result = hasher.finalize();
+    format!("{:x}", result)
+}
+
+/// Check data integrity: given content and its expected hash, verify if they match.
+/// Returns true if they match, false and the expected hash otherwise.
+pub fn check_data_integrity(data: &str, expected_hash: &str) -> Result<bool, String> {
+    let computed_hash = hash_data(data);
+    if computed_hash == expected_hash {
+        Ok(true)
+    } else {
+        Err(computed_hash)
+    }
+}
+
+// DIGITAL SIGNATURE
+// Here I want to use the "signature" crate to sign a some content.
+
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier};
+use rand::TryRngCore;
+use rand::rngs::OsRng;
+
+/// A function to generate a signing key
+pub fn generate_signing_key() -> SigningKey {
+    // Generate a signing key using the OS RNG
+    let mut csprng = OsRng;
+    let mut secret_bytes = [0u8; 32];
+    csprng
+        .try_fill_bytes(&mut secret_bytes)
+        .expect("rng fill failed");
+    SigningKey::from_bytes(&secret_bytes)
+}
+
+/// A function to sign a document
+pub fn sign_document(
+    document: &str,
+    signing_key: &SigningKey,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let signature: Signature = signing_key.sign(document.as_bytes());
+    Ok(hex::encode(signature.to_bytes()))
+}
+
+/// A function to verify a signed document
+pub fn verify_signed_document(
+    document: &str,
+    signature_hex: &str,
+    verifying_key: &ed25519_dalek::VerifyingKey,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let signature_bytes = hex::decode(signature_hex)?;
+    let signature_array: [u8; 64] = signature_bytes.as_slice().try_into().map_err(|_| {
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "invalid signature length",
+        ))
+    })?;
+    let signature = Signature::from_bytes(&signature_array);
+    match verifying_key.verify(document.as_bytes(), &signature) {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
+    }
+}
+
+// MARKDOWN PROCESSING
+
+
+
+// Uses the markdown-frontmatter to extract frontmatter from markdown content
+pub fn extract_frontmatter(doc: &str) -> Result<(FrontMatter, &str), Box<dyn std::error::Error>> {
+    let (frontmatter, body) = markdown_frontmatter::parse(doc)?;
+    Ok((frontmatter, body))
+}
+
+/// Use markdown-rs to parse frontmatter (Yaml or Toml) and return the parsed `FrontMatter` and the
+/// remaining body slice. Returns an error when parsing the document or deserializing the
+/// frontmatter fails, or when no frontmatter is present.
+pub fn extract_frontmatter_with_markdown(
+    doc: &str,
+) -> Result<(FrontMatter, &str), Box<dyn std::error::Error>> {
+    use markdown::mdast::Node;
+
+    // Enable the `frontmatter` construct so YAML/TOML frontmatter is parsed into the AST.
+    let mut parse_opts = markdown::ParseOptions::default();
+    parse_opts.constructs.frontmatter = true;
+    let root = match markdown::to_mdast(doc, &parse_opts) {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            )));
+        }
+    };
+
+    if let Some(children) = root.children() {
+        if let Some(first) = children.first() {
+            match first {
+                Node::Yaml(y) => {
+                    // Use `serde_norway` to deserialize YAML frontmatter (not `serde_yaml`).
+                    let fm: FrontMatter = serde_norway::from_str(&y.value)?;
+                    let body_start = y.position.as_ref().map(|p| p.end.offset).unwrap_or(0);
+                    let body = &doc[body_start..];
+                    return Ok((fm, body));
+                }
+                Node::Toml(_t) => {
+                    // TOML frontmatter is intentionally not supported by this extractor.
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "TOML frontmatter not supported",
+                    )));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Err(Box::new(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "no frontmatter found",
+    )))
+}
+
+// Parses a markdown text, and extract all the fenced code blocs (if any). It returns an ordered array? tuple? struct? (data structured to be defined)
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Block<'a> {
+    Text(TextBlock<'a>),
+    Code(CodeBlock<'a>),
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextBlock<'a> {
+    /// Raw markdown slice for the text chunk between fenced blocks.
+    pub content: &'a str,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeBlock<'a> {
+    /// Fence info if you care (``` vs ~~~) and length (``` vs ````).
+    pub fence: Fence,
+    /// Optional language/info string after the opening fence (e.g. "rust", "bash", "rust,no_run")
+    pub info: Option<&'a str>,
+    /// Contents inside the fence (typically excludes the fence lines themselves).
+    pub code: &'a str,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fence {
+    Backticks,
+    Tildes,
+}
+
+pub fn extract_code_blocks<'a>(doc: &'a str) -> Vec<Block<'a>> {
+    let mut blocks = Vec::new();
+    let mut last_pos = 0usize;
+    let mut pos = 0usize;
+
+    while pos < doc.len() {
+        // find end of current line (include newline if present)
+        let line_end = if let Some(nl) = doc[pos..].find('\n') {
+            pos + nl + 1
+        } else {
+            doc.len()
+        };
+
+        let line = &doc[pos..line_end];
+        let trimmed = line.trim_start();
+
+        if let Some(first) = trimmed.chars().next() {
+            if first == '`' || first == '~' {
+                let fence_char = first;
+                let fence_count = trimmed.chars().take_while(|c| *c == fence_char).count();
+                if fence_count >= 3 {
+                    let fence_kind = if fence_char == '`' {
+                        Fence::Backticks
+                    } else {
+                        Fence::Tildes
+                    };
+
+                    // find byte index of the first char after the fence (in the trimmed slice)
+                    let mut after_fence_byte = 0usize;
+                    for (i, c) in trimmed.char_indices() {
+                        if c != fence_char {
+                            after_fence_byte = i;
+                            break;
+                        }
+                    }
+                    let info_raw = trimmed
+                        .get(after_fence_byte..)
+                        .unwrap_or("")
+                        .trim_end_matches('\n')
+                        .trim();
+                    let info = if info_raw.is_empty() {
+                        None
+                    } else {
+                        Some(info_raw)
+                    };
+
+                    // push preceding text block if any
+                    if last_pos < pos {
+                        if let Some(text_slice) = doc.get(last_pos..pos) {
+                            if !text_slice.is_empty() {
+                                blocks.push(Block::Text(TextBlock {
+                                    content: text_slice,
+                                }));
+                            }
+                        }
+                    }
+
+                    // search for closing fence starting from next line
+                    let mut inner_pos = line_end;
+                    let mut found_closing = None;
+                    while inner_pos < doc.len() {
+                        let inner_line_end = if let Some(nl) = doc[inner_pos..].find('\n') {
+                            inner_pos + nl + 1
+                        } else {
+                            doc.len()
+                        };
+                        let inner_line = &doc[inner_pos..inner_line_end];
+                        let inner_trim = inner_line.trim_start();
+                        if let Some(c0) = inner_trim.chars().next() {
+                            if c0 == fence_char {
+                                let closing_count =
+                                    inner_trim.chars().take_while(|c| *c == fence_char).count();
+                                if closing_count >= fence_count {
+                                    found_closing = Some(inner_pos);
+                                    break;
+                                }
+                            }
+                        }
+                        inner_pos = inner_line_end;
+                    }
+
+                    let code_start = line_end;
+                    let (code_end, closing_end) = if let Some(closing_start) = found_closing {
+                        // closing line end
+                        let closing_line_end = if let Some(nl) = doc[closing_start..].find('\n') {
+                            closing_start + nl + 1
+                        } else {
+                            doc.len()
+                        };
+                        (closing_start, closing_line_end)
+                    } else {
+                        (doc.len(), doc.len())
+                    };
+
+                    let code_slice = doc.get(code_start..code_end).unwrap_or("");
+                    blocks.push(Block::Code(CodeBlock {
+                        fence: fence_kind,
+                        info,
+                        code: code_slice,
+                    }));
+
+                    last_pos = closing_end;
+                    pos = closing_end;
+                    continue;
+                }
+            }
+        }
+
+        pos = line_end;
+    }
+
+    if last_pos < doc.len() {
+        if let Some(tail) = doc.get(last_pos..) {
+            if !tail.is_empty() {
+                blocks.push(Block::Text(TextBlock { content: tail }));
+            }
+        }
+    }
+
+    blocks
+}
+
+// Alternative extractor backed by `markdown-rs` (mdast parsing). This produces owned
+// blocks (strings) rather than borrowing slices from the original document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlockOwned {
+    Text(String),
+    Code(CodeBlockOwned),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeBlockOwned {
+    pub fence: Fence,
+    pub info: Option<String>,
+    pub code: String,
+}
+
+fn detect_fence_kind_at(doc: &str, start: usize) -> Fence {
+    if let Some(slice) = doc.get(start..) {
+        let first_line_end = slice.find('\n').unwrap_or(slice.len());
+        let first_line = &slice[..first_line_end];
+        let trimmed = first_line.trim_start();
+        if let Some(ch) = trimmed.chars().next() {
+            if ch == '`' {
+                return Fence::Backticks;
+            }
+            if ch == '~' {
+                return Fence::Tildes;
+            }
+        }
+    }
+    Fence::Backticks
+}
+
+pub fn extract_code_blocks_with_markdown(
+    doc: &str,
+) -> Result<Vec<BlockOwned>, markdown::message::Message> {
+    use markdown::mdast::Node;
+
+    let root = markdown::to_mdast(doc, &markdown::ParseOptions::default())?;
+
+    // collect all Code nodes with their positions
+    let mut codes: Vec<(usize, usize, Option<String>, String)> = Vec::new();
+
+    fn collect(
+        node: &markdown::mdast::Node,
+        out: &mut Vec<(usize, usize, Option<String>, String)>,
+    ) {
+        match node {
+            Node::Code(c) => {
+                if let Some(pos) = &c.position {
+                    out.push((
+                        pos.start.offset,
+                        pos.end.offset,
+                        c.lang.clone(),
+                        c.value.clone(),
+                    ));
+                }
+            }
+            _ => {
+                if let Some(children) = node.children() {
+                    for ch in children {
+                        collect(ch, out);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(children) = root.children() {
+        for n in children {
+            collect(n, &mut codes);
+        }
+    }
+
+    // sort by document offset to ensure proper order
+    codes.sort_by_key(|t| t.0);
+
+    let mut blocks: Vec<BlockOwned> = Vec::new();
+    let mut last = 0usize;
+
+    for (start, end, lang, value) in codes {
+        if last < start {
+            if let Some(text_slice) = doc.get(last..start) {
+                if !text_slice.is_empty() {
+                    let mut s = text_slice.to_string();
+                    // normalize a single leading newline after a code block so outputs match
+                    // the behaviour of the slice-based extractor
+                    if s.starts_with('\n') {
+                        s.remove(0);
+                    }
+                    blocks.push(BlockOwned::Text(s));
+                }
+            }
+        }
+
+        let fence = detect_fence_kind_at(doc, start);
+        let info = lang;
+
+        // reconstruct inner code slice from the original document so we preserve trailing
+        // newlines and exact formatting that `mdast::Code.value` might trim.
+        let code_text = if let Some(block) = doc.get(start..end) {
+            let lines: Vec<&str> = block.split_inclusive('\n').collect();
+            let first_line_len = if !lines.is_empty() { lines[0].len() } else { 0 };
+            let last_line = lines.last().unwrap_or(&"");
+            // detect a closing fence line (e.g. "```" or "~~~") and its length
+            let closing_line_len = if !last_line.trim().is_empty() {
+                let t = last_line.trim_start();
+                let ch = t.chars().next().unwrap_or('\0');
+                if (ch == '`' || ch == '~') && t.chars().all(|c| c == ch) {
+                    last_line.len()
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+
+            let inner_start = start + first_line_len;
+            let inner_end = end.saturating_sub(closing_line_len);
+            doc.get(inner_start..inner_end).unwrap_or("").to_string()
+        } else {
+            value
+        };
+
+        blocks.push(BlockOwned::Code(CodeBlockOwned {
+            fence,
+            info,
+            code: code_text,
+        }));
+        last = end;
+    }
+
+    if last < doc.len() {
+        if let Some(tail) = doc.get(last..) {
+            if !tail.is_empty() {
+                let mut s = tail.to_string();
+                if s.starts_with('\n') {
+                    s.remove(0);
+                }
+                blocks.push(BlockOwned::Text(s));
+            }
+        }
+    }
+
+    Ok(blocks)
+}
+
+/// Produce a hash of the document while excluding specified frontmatter keys (e.g. "version_hash").
+/// The function combines known frontmatter fields and `extra`, removes keys in `exclude_keys`,
+/// serializes the resulting map and hashes the serialized frontmatter + body.
+// pub fn document_hash_excluding(
+//     fm: &FrontMatter,
+//     body: &str,
+//     exclude_keys: &[&str],
+// ) -> Result<String, Box<dyn std::error::Error>> {
+//     use serde_norway::Value;
+
+//     // Start from a clone of the arbitrary extra keys
+//     let mut map: BTreeMap<String, Value> = fm.extra.clone();
+
+//     // Insert known fields (these override any duplicate keys in extra)
+//     map.insert("title".to_string(), Value::String(fm.title.clone()));
+//     map.insert("created_at".to_string(), Value::String(fm.created_at.clone()));
+//     map.insert(
+//         "doc_status".to_string(),
+//         Value::String(match fm.doc_status {
+//             DocStatus::Notes => "Notes".to_string(),
+//             DocStatus::Draft => "Draft".to_string(),
+//             DocStatus::Published => "Published".to_string(),
+//         }),
+//     );
+//     if !fm.modified_at.is_empty() {
+//         map.insert("modified_at".to_string(), Value::String(fm.modified_at.clone()));
+//     }
+//     if !fm.hash_at.is_empty() {
+//         map.insert("hash_at".to_string(), Value::String(fm.hash_at.clone()));
+//     }
+
+//     // Remove excluded keys
+//     for &k in exclude_keys {
+//         map.remove(k);
+//     }
+
+//     // Serialize the map to YAML (via serde_norway) deterministically (BTreeMap keeps keys sorted)
+//     let fm_yaml = serde_norway::to_string(&map)?;
+
+//     // Build canonical payload (frontmatter + body) and hash it
+//     let payload = format!("---\n{}\n---\n{}", fm_yaml, body);
+//     Ok(hash_data(&payload))
+// }
+
+// TESTING
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_data() {
+        let data = "hello";
+        let hash = hash_data(data);
+        assert_eq!(hash.len(), 64);
+        assert_eq!(hash, hash_data(data));
+        print!("hash is {}\n", hash)
+    }
+
+    #[test]
+    #[should_panic(expected = "Return Ok(()) or an Error once implemented")]
+    fn test_create_manuscript_is_placeholder() {
+        // `create_manuscript` currently calls `todo!(...)`, so it should panic with that message.
+        let _ = create_manuscript("My Title", "initial content");
+    }
+
+    #[test]
+    fn test_extract_frontmatter_basic() {
+        let md = r#"---
+title: "Hello"
+created_at: "2025-12-17"
+---
+Body content"#;
+        let (fm, body) = extract_frontmatter(md).expect("parse frontmatter");
+        assert_eq!(fm.title, "Hello");
+        assert_eq!(body.trim(), "Body content");
+        print!(
+            "\n Frontmatter is \nn {}, created at {}\n",
+            fm.title, fm.created_at
+        );
+        print!("\n Body content is ... \n {}", body.trim())
+    }
+
+    #[test]
+    fn test_extract_frontmatter_with_markdown_basic() {
+        let md = r#"---
+title: "Hello"
+created_at: "2025-12-17"
+---
+Body content"#;
+        let (fm, body) = extract_frontmatter_with_markdown(md).expect("parse md frontmatter");
+        assert_eq!(fm.title, "Hello");
+        assert_eq!(body.trim(), "Body content");
+    }
+
+    #[test]
+    fn test_extract_code_blocks_basic() {
+        let md = "Intro\n\n```rust\nfn main() {}\n```\nEnd";
+        let blocks = extract_code_blocks(md);
+        assert_eq!(blocks.len(), 3);
+        assert_eq!(
+            blocks[0],
+            Block::Text(TextBlock {
+                content: "Intro\n\n"
+            })
+        );
+        match &blocks[1] {
+            Block::Code(cb) => {
+                assert_eq!(cb.fence, Fence::Backticks);
+                assert_eq!(cb.info, Some("rust"));
+                assert_eq!(cb.code, "fn main() {}\n");
+            }
+            _ => panic!("expected code block"),
+        }
+        assert_eq!(blocks[2], Block::Text(TextBlock { content: "End" }));
+    }
+
+    #[test]
+    fn test_extract_code_blocks_tildes_and_unclosed() {
+        let md = "A\n~~~bash\nls\n~~~\nB\n```py\nprint(1)\n";
+        let blocks = extract_code_blocks(md);
+        assert_eq!(blocks.len(), 4);
+        // first code block is tildes
+        match &blocks[1] {
+            Block::Code(cb) => {
+                assert_eq!(cb.fence, Fence::Tildes);
+                assert_eq!(cb.info, Some("bash"));
+                assert_eq!(cb.code, "ls\n");
+            }
+            _ => panic!("expected tildes code block"),
+        }
+        // the intervening line should be a text block
+        assert_eq!(blocks[2], Block::Text(TextBlock { content: "B\n" }));
+        // unclosed backtick block becomes final code block
+        match &blocks[3] {
+            Block::Code(cb) => {
+                assert_eq!(cb.fence, Fence::Backticks);
+                assert_eq!(cb.info, Some("py"));
+                assert_eq!(cb.code, "print(1)\n");
+            }
+            _ => panic!("expected unclosed code block"),
+        }
+    }
+
+    #[test]
+    fn test_extract_code_blocks_with_markdown_basic() {
+        let md = "Intro\n\n```rust\nfn main() {}\n```\nEnd";
+        let blocks = extract_code_blocks_with_markdown(md).expect("parse md");
+        assert_eq!(blocks.len(), 3);
+        assert_eq!(blocks[0], BlockOwned::Text("Intro\n\n".to_string()));
+        match &blocks[1] {
+            BlockOwned::Code(cb) => {
+                assert_eq!(cb.fence, Fence::Backticks);
+                assert_eq!(cb.info.as_deref(), Some("rust"));
+                assert_eq!(cb.code, "fn main() {}\n");
+            }
+            _ => panic!("expected code block"),
+        }
+        assert_eq!(blocks[2], BlockOwned::Text("End".to_string()));
+    }
+
+    #[test]
+    fn test_extract_code_blocks_with_markdown_tildes_and_unclosed() {
+        let md = "A\n~~~bash\nls\n~~~\nB\n```py\nprint(1)\n";
+        let blocks = extract_code_blocks_with_markdown(md).expect("parse md");
+        // tildes code block followed by text and then unclosed code block
+        assert_eq!(blocks.len(), 4);
+        match &blocks[1] {
+            BlockOwned::Code(cb) => {
+                assert_eq!(cb.fence, Fence::Tildes);
+                assert_eq!(cb.info.as_deref(), Some("bash"));
+                assert_eq!(cb.code, "ls\n");
+            }
+            _ => panic!("expected tildes code block"),
+        }
+        assert_eq!(blocks[2], BlockOwned::Text("B\n".to_string()));
+        match &blocks[3] {
+            BlockOwned::Code(cb) => {
+                assert_eq!(cb.fence, Fence::Backticks);
+                assert_eq!(cb.info.as_deref(), Some("py"));
+                assert_eq!(cb.code, "print(1)\n");
+            }
+            _ => panic!("expected unclosed code block"),
+        }
+    }
+
+    #[test]
+    fn test_sign_and_verify_roundtrip() {
+        let msg = "Hello, world!";
+        let signing_key = generate_signing_key();
+        let verifying_key = ed25519_dalek::VerifyingKey::from(&signing_key);
+        let sig_hex = sign_document(msg, &signing_key).expect("sign");
+        assert_eq!(sig_hex.len(), 128);
+        let verified = verify_signed_document(msg, &sig_hex, &verifying_key).expect("verify");
+        assert!(verified);
+    }
+
+    #[test]
+    fn test_verify_with_modified_message_fails() {
+        let msg = "Message A";
+        let signing_key = generate_signing_key();
+        let verifying_key = ed25519_dalek::VerifyingKey::from(&signing_key);
+        let sig_hex = sign_document(msg, &signing_key).expect("sign");
+        let verified =
+            verify_signed_document("Message B", &sig_hex, &verifying_key).expect("verify");
+        assert!(!verified);
+    }
+
+    #[test]
+    fn test_verify_with_invalid_hex_returns_err() {
+        let signing_key = generate_signing_key();
+        let verifying_key = ed25519_dalek::VerifyingKey::from(&signing_key);
+        let res = verify_signed_document("msg", "zz", &verifying_key);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_signature_is_64_bytes() {
+        let msg = "check length";
+        let signing_key = generate_signing_key();
+        let sig_hex = sign_document(msg, &signing_key).unwrap();
+        let sig_bytes = hex::decode(&sig_hex).unwrap();
+        assert_eq!(sig_bytes.len(), 64);
+    }
+
+    #[test]
+    fn test_serialize_manuscript_auto_fields() {
+        let mut extra = BTreeMap::new();
+        extra.insert(
+            "foo".to_string(),
+            serde_norway::Value::String("bar".to_string()),
+        );
+        let fm = FrontMatter {
+            id: "id1".into(),
+            version_hash: Some("v1".into()),
+            title: "T".into(),
+            author: Some("A".into()),
+            created_at: "2025-12-20".into(),
+            doc_status: Some(DocStatus::Draft),
+            modified_at: Some("m".into()),
+            extra,
+        };
+        let doc = TracedDocument {
+            frontmatter: fm,
+            body: "body".into(),
+        };
+        let s = serialize_manuscript(&doc).unwrap();
+        assert!(s.contains("id:"));
+        assert!(s.contains("title"));
+        assert!(s.contains("foo:"));
+        assert!(s.ends_with("body"));
+    }
+}

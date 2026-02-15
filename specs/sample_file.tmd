@@ -1,0 +1,16 @@
+---
+id: 550e8400-e29b-41d4-a716-446655440000 #UUID v7 - on file creation - better to be ULID
+version_id: SHA256, renewed every time # also called version_hash - renewed every time
+title: test document
+author: Name Surname / uuide
+authorship: human, AI, mixed # optional
+status: draft
+trace_logic: 
+
+signature: Ed25519 HEX econded (why thot Base64) - null by default
+created_at: 2023-10-27T10:00:00Z
+modified_at: 2023-10-27T14:30:00Z
+
+
+---
+Sample content

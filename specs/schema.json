@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Traced Markdown Document (v1)",
+  "description": "A standard for immutable, verifiable, and agentic-ready research documents.",
+  "type": "object",
+  "required": ["frontmatter", "body"],
+  "properties": {
+    "frontmatter": {
+      "type": "object",
+      "description": "YAML frontmatter containing document metadata.",
+      "required": ["id", "title", "created_at", "doc_status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The Document ID (UUID v7). This never changes, even as the document evolves."
+        },
+        "version_hash": {
+          "type": ["array", "null"],
+          "description": "SHA-256 hash (32 bytes) of the canonicalized frontmatter + body. Computed during sealing.",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "minItems": 32,
+          "maxItems": 32
+        },
+        "title": {
+          "type": "string",
+          "description": "The document title."
+        },
+        "author": {
+          "type": ["string", "null"],
+          "description": "The author's name or identifier."
+        },
+        "signature": {
+          "type": ["object", "null"],
+          "description": "Ed25519 signature (64 bytes) of the version_hash. Proves authenticity. Stored as hex string in YAML but represented as bytes internally."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of document creation."
+        },
+        "modified_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last modification."
+        },
+        "doc_status": {
+          "type": "string",
+          "enum": ["Notes", "Draft", "Published"],
+          "description": "Document rigor level. Published requires version_hash and signature."
+        },
+        "extra": {
+          "type": ["object", "null"],
+          "description": "Optional key-value pairs for custom metadata.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "body": {
+      "type": "string",
+      "description": "The Markdown content of the document, including narrative and trace/include blocks."
+    }
+  },
+  "definitions": {
+    "TraceBlock": {
+      "type": "object",
+      "description": "Evidence block linking a claim to its source.",
+      "required": ["source", "expected"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "The location of the evidence (local path, URL, or CID)."
+        },
+        "hash": {
+          "type": ["string", "null"],
+          "description": "SHA-256 hash of the source file (format: 'sha256:hexstring'). Required for Published documents.",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "selector": {
+          "type": ["string", "null"],
+          "description": "Query or pattern to extract data from the source (JSONPath, regex, CSV coordinates, etc.)."
+        },
+        "expected": {
+          "type": "string",
+          "description": "The value that the author claims exists at the source."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["automatic", "manual", "agent"],
+          "default": "automatic",
+          "description": "Verification method."
+        },
+        "timestamp": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of when the trace was last verified."
+        },
+        "context": {
+          "type": ["string", "null"],
+          "description": "Surrounding text snippet from the source to aid human verification."
+        },
+        "confidence": {
+          "type": ["number", "null"],
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Author's certainty level (0.0 to 1.0)."
+        },
+        "agent_metadata": {
+          "type": ["object", "null"],
+          "description": "Metadata for AI-generated traces.",
+          "properties": {
+            "model": {
+              "type": "string",
+              "description": "The AI model used (e.g., 'gpt-4o', 'claude-3')."
+            },
+            "prompt_hash": {
+              "type": ["string", "null"],
+              "description": "SHA-256 hash of the system prompt used to generate the trace.",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": ["model"]
+        }
+      }
+    },
+    "IncludeBlock": {
+      "type": "object",
+      "description": "Composition block for modular document assembly.",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Relative or absolute path to the included file."
+        },
+        "hash": {
+          "type": ["string", "null"],
+          "description": "SHA-256 hash of the included file. Required for Published documents.",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "encoding": {
+          "type": "string",
+          "default": "utf-8",
+          "description": "Character encoding of the included file."
+        },
+        "timestamp": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of when the include was last verified."
+        }
+      }
+    }
+  }
+}
