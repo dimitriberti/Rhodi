@@ -1,4 +1,4 @@
-# Trace Protocol
+# Rhodi: a "truth engine"
 
 > **Standardizing the Chain of Custody for Human & Artificial Intelligence.**
 
