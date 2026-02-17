@@ -1,12 +1,10 @@
-# Rhodi: a "truth engine"
+# Rhodi (Trace Protocol)
 
 > **Standardizing the Chain of Custody for Human & Artificial Intelligence.**
 
-Trace Protocol is a document format designed to promote trustworthy content in agentic and hybrid research workflows (AI + humans).
+Rhodi is a document format and a "truth engine" designed to promote trustworthy content. It extends Markdown, using the frontmatter to store all the metadata needed for cryptographic verification. It is written in Rust, with plans to deploy via WASM and Python packages.
 
----
-
-**This is an experiment in accountability.** Rhodi was born from a growing concern about information corruption in the digital age. As AI-generated content proliferates and attention economies incentivize engagement over truth, I wanted to build something practical rather than just think abstractly about these problems. It explores how we might verify the origins of information, track the chain of custody for ideas, and distinguish human reasoning from synthetic generation.
+**This is an experiment in accountability.** Rhodi was born from a growing concern about information corruption in the digital age. As AI-generated content proliferates and attention economies incentivize engagement over truth, I wanted to explore the subject by building something tangible rather than just think abstractly about these problems. It explores how we might verify the origins of information, track the chain of custody for ideas.
 
 I've chosen to release this as open source because:
 - **Feedback is welcome** – Recommendations, alternative approaches, and critiques will only make this better
@@ -15,17 +13,16 @@ I've chosen to release this as open source because:
 
 This is an alpha implementation. It's a starting point, not a finished solution. If you're interested in these problems—whether from journalism, research, AI safety, cryptography, or just curiosity—I encourage you to try it, break it, and share your thoughts.
 
----
-
 This project stems from my experience working in innovation and research consulting. I observed that by the time information reached its final stage, it was often corrupted and arbitrary—not through malice, but through accumulated distortion in the chain of custody.
 
 ## 0. Background
 
-Trace Protocol emerged from years of observation in innovation and research consulting. In high-stakes environments, the "chain of custody" for an idea is often non-existent. As insights move from raw data to final executive summaries, they undergo a process of information entropy: a gradual decay where nuance is lost, and claims are stripped of their evidence.
+Trace Protocol emerged from years of interacting with large organizations. In high-stakes environments, the "chain of custody" for an idea is often non-existent. As insights move from raw data to final executive summaries, they undergo a process of information entropy: a gradual decay where nuance is lost, and claims are stripped of their evidence.
 
 Traditional document formats (.docx, .pdf, .pptx) are opaque binary blobs that prioritize visual layout over data integrity. They are not "machine-readable" in a meaningful way, making it nearly impossible to audit how a specific claim evolved or who is responsible for a change.
 
-The Core Friction
+## 1. The Core Friction
+
 The current research landscape suffers from five critical failures:
 
 - The "Blob" Problem: Proprietary formats are black boxes. They cannot be easily version-controlled (via diff), making the evolution of a document invisible.
@@ -151,7 +148,7 @@ Detailed documentation for the protocol and its implementation:
 When a document is "sealed", it:
 1. Updates the document status to `Published` and sets the `modified_at` timestamp
 2. Canonicalizes the content (normalizes line endings to LF, strips trailing whitespace, sorts YAML keys)
-3. Computes a SHA-256 `version_hash` of the frontmatter (excluding `version_hash` and `signature`) + body
+3. Computes a SHA-256 `version_hash` of the frontmatter (excluding `version_hash`, `prev_version_hash`, and `signature`) + body
 4. Signs the hash with the author's Ed25519 private key
 
 Any modification to the document after sealing will cause verification to fail.
@@ -174,30 +171,59 @@ Any modification to the document after sealing will cause verification to fail.
 - External version registry support
 - Citation chain verification (warn when citing deprecated docs)
 
-## 8. Installation
+## 8. Installation & Usage
+
+### Build from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/rhodi.git
+git clone https://github.com/dimitriberti/rhodi.git
 cd rhodi/core
 
 # Run tests
 cargo test
 
-# Build the core library
+# Build the CLI
 cargo build --release
+
+# Or run directly
+cargo run -- init my-document.tmd --title "My Research"
 ```
+
+### CLI Commands
+
+```bash
+# Create a new document
+rhodi init doc.tmd --title "Research Notes" --author "Your Name"
+
+# Generate a signing key
+rhodi keygen --name default
+
+# Seal the document (hash + sign)
+rhodi seal doc.tmd
+
+# Verify integrity
+rhodi verify doc.tmd
+
+# Check document status
+rhodi status doc.tmd
+```
+
+For more details, see the CLI help: `rhodi --help`
 
 ## 9. Contributing
 
-_Guidelines to be established._
+Contributions are welcome! Please read [AGENTS.md](AGENTS.md) for development guidelines, then:
+
+1. Fork the repo
+2. Create a feature branch
+3. Make your changes
+4. Run `cargo test` and `cargo clippy -- -D warnings`
+5. Submit a pull request
 
 ## 10. License
 
-_To be decided._
-
----
-
-As AI agents increasingly participate in knowledge work, the "Chain of Custody" for information is becoming critical for trust. If you cannot trace a piece of reasoning back to a verified human or a signed data source, the output becomes unreliable.
+Dual licensed under MIT (open source) and commercial terms. See [LICENSE](LICENSE) file for details.
 
 
+*As AI agents increasingly participate in knowledge work, the "Chain of Custody" for information is becoming critical for trust. If you cannot trace a piece of reasoning back to a verified human or a signed data source, the output becomes unreliable.*

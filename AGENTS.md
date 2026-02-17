@@ -33,7 +33,7 @@ All core development happens in the `core/` directory.
   ```
 
 ### Error Handling
-- **Transitioning**: We are migrating from `Result<T, String>` to structured errors using the `thiserror` crate.
+- **Structured Errors**: Using `thiserror` crate with `RhodiError` enum.
 - **New Code**: Define errors in a central `error.rs` or locally using `#[derive(Error, Debug)]`.
 - **Safety**: Avoid `unwrap()` and `expect()` in production code. Use `?`, `ok_or`, or `map_err`.
 - **Validation**: Always validate external inputs (file paths, URLs) to prevent traversal attacks.
@@ -49,14 +49,21 @@ All core development happens in the `core/` directory.
 - **Algorithm**: Use `ed25519-dalek` for signing/verification and `sha2` for hashing.
 - **Canonicalization**: Always canonicalize text (LF line endings, strip trailing whitespace) before hashing.
   - See `crate::markdown::canonicalize_text` for implementation.
-- **Hashing**: `version_hash` = `SHA256(canonical_frontmatter + canonical_body)`.
+- **Hashing**: `version_hash` = `SHA256(canonical_frontmatter + canonical_body)`. Includes `protocol_version`, `doc_version`, and `prev_version_hash`.
 - **Signature**: The signature covers the `version_hash` and must be excluded from the hash itself.
 
-## Implementation Priorities (Phase 0)
-1. **Hardening**: Implement path traversal protection for `include` and `trace` blocks.
-2. **Truth Engine**: Implement `Extractor` logic for Regex and JSONPath selectors.
-3. **Structured Errors**: Refactor existing modules to replace string-based errors.
-4. **Safety**: Implement recursion guards and depth limits for modular includes.
+## Implementation Status
+All Phase 0 priorities completed:
+- ✅ Path traversal protection
+- ✅ Extractor logic (Regex, JSONPath)
+- ✅ Structured errors with thiserror
+- ✅ Recursion guards and depth limits
+- ✅ Protocol versioning (Current/Deprecated/Obsolete)
+- ✅ Document versioning with hash chaining
+
+## Future Priorities
+- External version registry support
+- Citation chain verification (warn when citing deprecated docs)
 
 ## Document Lifecycle
 - **Notes**: Passive, no verification required.
@@ -77,6 +84,9 @@ Rhodi follows a **"Core + Bindings"** philosophy:
 - `core/src/markdown.rs`: TMD parsing and canonicalization logic.
 - `core/src/resolver.rs`: Source resolution traits for files/URLs.
 - `core/src/crypto.rs`: KeyPair generation and signing logic.
+- `core/src/version.rs`: Protocol version registry (Current/Deprecated/Obsolete).
+- `core/src/cli/`: CLI module and commands.
+- `core/src/main.rs`: Binary entry point.
 - `specs/`: Markdown specifications for the protocol (Refer to these for logic changes).
 
 ## Protocol Specifics
@@ -124,4 +134,4 @@ Rhodi follows a **"Core + Bindings"** philosophy:
 - Use `mermaid` diagrams in Markdown for complex flows.
 
 ---
-*Last Updated: Jan 2026*
+*Last Updated: Feb 2026*
