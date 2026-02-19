@@ -232,4 +232,49 @@ agent_metadata:
         assert!(!result.contains("   \n"));
         assert!(result.ends_with("Hello World\n"));
     }
+
+    #[test]
+    fn test_extra_field_does_not_collide_with_standard_fields() {
+        // Two documents identical except one has an extra field named "title"
+        // which should NOT change the hash as if the title itself changed.
+        let doc1 = TracedDocument::new("Real Title", "body")
+            .extra_info("title", "Fake Title");
+
+        let doc2 = TracedDocument::new("Real Title", "body")
+            .extra_info("title", "Different Fake");
+
+        let doc_no_extra = TracedDocument::new("Real Title", "body");
+
+        let hash1 = doc1.compute_version_hash();
+        let hash2 = doc2.compute_version_hash();
+        let hash_no_extra = doc_no_extra.compute_version_hash();
+
+        // Extra fields with the same standard field name should still produce
+        // different hashes from each other (they are distinct extra values)
+        assert_ne!(hash1, hash2);
+        // And both should differ from the doc without the extra field
+        assert_ne!(hash1, hash_no_extra);
+        assert_ne!(hash2, hash_no_extra);
+    }
+
+    #[test]
+    fn test_frontmatter_roundtrip_format() {
+        // Verify that serialized frontmatter with \n before closing ---
+        // can be parsed back correctly
+        let fm = FrontMatter {
+            title: "Roundtrip Test".to_string(),
+            author: Some("Author".to_string()),
+            doc_status: DocStatus::Draft,
+            ..Default::default()
+        };
+
+        let fm_yaml = serde_norway::to_string(&fm).unwrap();
+        let content = format!("---\n{}\n---\n\nBody text here.", fm_yaml.trim());
+        let doc = parse_tmd(&content).unwrap();
+
+        assert_eq!(doc.frontmatter.title, "Roundtrip Test");
+        assert_eq!(doc.frontmatter.author.as_deref(), Some("Author"));
+        assert_eq!(doc.frontmatter.doc_status, DocStatus::Draft);
+        assert_eq!(doc.body, "Body text here.");
+    }
 }

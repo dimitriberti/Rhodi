@@ -17,7 +17,13 @@ impl Extractor for RegexExtractor {
 
         if let Some(caps) = re.captures(&text) {
             // If there's a capture group, return the first one, otherwise the whole match
-            let val = caps.get(1).or_else(|| caps.get(0)).unwrap().as_str();
+            let val = caps
+                .get(1)
+                .or_else(|| caps.get(0))
+                .ok_or_else(|| {
+                    RhodiError::Extraction(format!("Regex '{}' matched but captured no value", selector))
+                })?
+                .as_str();
             Ok(val.to_string())
         } else {
             Err(RhodiError::Extraction(format!(
@@ -41,7 +47,7 @@ impl Extractor for JsonPathExtractor {
 
         let found = finder.find();
 
-        if found.is_null() || (found.is_array() && found.as_array().unwrap().is_empty()) {
+        if found.is_null() || (found.is_array() && found.as_array().is_some_and(|a| a.is_empty())) {
             return Err(RhodiError::Extraction(format!(
                 "JSONPath '{}' found no matches",
                 selector
