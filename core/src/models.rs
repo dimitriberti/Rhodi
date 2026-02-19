@@ -304,52 +304,54 @@ impl TracedDocument {
 
         // 2. Hash the frontmatter (excluding version_hash and signature)
         // We use a temporary BTreeMap to ensure sorted keys for deterministic hashing
-        let mut fm_map = BTreeMap::new();
-        fm_map.insert("id", self.frontmatter.id.to_string());
-        fm_map.insert("title", self.frontmatter.title.clone());
+        let mut fm_map: BTreeMap<String, String> = BTreeMap::new();
+        fm_map.insert("id".into(), self.frontmatter.id.to_string());
+        fm_map.insert("title".into(), self.frontmatter.title.clone());
         if let Some(ref author) = self.frontmatter.author {
-            fm_map.insert("author", author.clone());
+            fm_map.insert("author".into(), author.clone());
         }
         if let Some(ref pk) = self.frontmatter.public_key {
-            fm_map.insert("public_key", pk.clone());
+            fm_map.insert("public_key".into(), pk.clone());
         }
 
         // Policy fields
         fm_map.insert(
-            "policy_allow_include",
+            "policy_allow_include".into(),
             self.frontmatter.policy.allow_include.to_string(),
         );
         fm_map.insert(
-            "policy_allow_quote",
+            "policy_allow_quote".into(),
             self.frontmatter.policy.allow_quote.to_string(),
         );
         fm_map.insert(
-            "policy_require_attribution",
+            "policy_require_attribution".into(),
             self.frontmatter.policy.require_attribution.to_string(),
         );
 
-        fm_map.insert("created_at", self.frontmatter.created_at.to_rfc3339());
+        fm_map.insert("created_at".into(), self.frontmatter.created_at.to_rfc3339());
         if let Some(ref modified_at) = self.frontmatter.modified_at {
-            fm_map.insert("modified_at", modified_at.to_rfc3339());
+            fm_map.insert("modified_at".into(), modified_at.to_rfc3339());
         }
         fm_map.insert(
-            "doc_status",
+            "doc_status".into(),
             format!("{:?}", self.frontmatter.doc_status).to_lowercase(),
         );
 
         // Version fields
         fm_map.insert(
-            "protocol_version",
+            "protocol_version".into(),
             self.frontmatter.protocol_version.clone(),
         );
-        fm_map.insert("doc_version", self.frontmatter.doc_version.to_string());
+        fm_map.insert("doc_version".into(), self.frontmatter.doc_version.to_string());
         if let Some(ref prev_hash) = self.frontmatter.prev_version_hash {
-            fm_map.insert("prev_version_hash", hex::encode(prev_hash));
+            fm_map.insert("prev_version_hash".into(), hex::encode(prev_hash));
         }
 
+        // Extra fields are namespaced with "extra." prefix to prevent
+        // collisions with standard frontmatter fields in the hash.
         if let Some(ref extra) = self.frontmatter.extra {
             for (k, v) in extra {
-                fm_map.insert(k, v.clone());
+                fm_map.insert(format!("extra.{}", k), v.clone());
             }
         }
 

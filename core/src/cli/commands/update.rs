@@ -19,7 +19,7 @@ pub fn run(path: PathBuf) -> Result<()> {
         crate::error::RhodiError::Serialization(format!("Failed to serialize frontmatter: {}", e))
     })?;
 
-    let full_content = format!("---\n{}---\n\n{}", fm_yaml.trim(), doc.body);
+    let full_content = format!("---\n{}\n---\n\n{}", fm_yaml.trim(), doc.body);
     fs::write(&path, full_content)?;
 
     Ok(())

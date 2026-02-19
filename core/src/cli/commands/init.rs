@@ -31,7 +31,7 @@ pub fn run(path: Option<PathBuf>, title: Option<String>, author: Option<String>)
     })?;
 
     let content = format!(
-        "---\n{}---\n\n# {}\n\nStart writing your document here.\n",
+        "---\n{}\n---\n\n# {}\n\nStart writing your document here.\n",
         fm_yaml.trim(),
         title
     );
